@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Moodle-Assist</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">Moodle-Assist</div>
+      <nav>
+        <button id="nav-home" class="navbtn active">ホーム</button>
+        <button id="nav-settings" class="navbtn">設定</button>
+      </nav>
+      <div class="sidebar-footer muted"></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <h1 id="page-title">ホーム</h1>
+      </header>
+
+      <section id="home-view" class="view">
+        <div class="card">
+          <h2>課題一覧</h2>
+          <div id="tasksContainer"></div>
+        </div>
+      </section>
+
+      <section id="settings-view" class="view hidden">
+        <div class="card">
+          <h2>インポート</h2>
+          <input id="icsUrl" type="text" placeholder="ここにカレンダーのURLを入力" />
+          <button id="importBtn">インポート</button>
+          <div id="importResult" class="muted"></div>
+        </div>
+
+        <div class="card">
+          <h2>Discord Webhook</h2>
+          <div id="envWebhookInfo" class="muted"></div>
+
+          <label for="reminderDays">リマインドの日付設定</label>
+          <input id="reminderDays" type="number" min="0" step="1" />
+
+          <div style="margin-top:10px">
+            <button id="saveConfigBtn">保存</button>
+            <div id="configResult" class="muted" style="display:inline-block;margin-left:12px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Debug</h2>
+          <p class="muted">課題全削除</p>
+          <button id="clearAllBtn" style="background:#ef4444">実行</button>
+          <div id="clearResult" class="muted" style="margin-top:8px"></div>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+
+</html>
