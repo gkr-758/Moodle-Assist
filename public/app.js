@@ -1,3 +1,27 @@
+// ローカルストレージ管理
+const STORAGE_KEYS = {
+    TASKS: 'moodle_assist_tasks',
+    COURSES: 'moodle_assist_courses'
+};
+
+function getLocalTasks() {
+    const data = localStorage.getItem(STORAGE_KEYS.TASKS);
+    return data ? JSON.parse(data) : [];
+}
+
+function saveLocalTasks(tasks) {
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+}
+
+function getLocalCourses() {
+    const data = localStorage.getItem(STORAGE_KEYS.COURSES);
+    return data ? JSON.parse(data) : [];
+}
+
+function saveLocalCourses(courses) {
+    localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
+}
+
 async function api(path, method = 'GET', body = null) {
     const opts = { method, headers: {} };
     if (body) {
@@ -82,8 +106,8 @@ function showView(name) {
 }
 
 async function loadTasks() {
-    const tasks = await api('/api/tasks');
-    const courses = await api('/api/courses');
+    const tasks = getLocalTasks();
+    const courses = getLocalCourses();
     const courseMap = {};
     courses.forEach(c => courseMap[c.courseId] = c.courseName);
 
@@ -202,12 +226,12 @@ function createTaskElem(t) {
     if (t.status === 'active') {
         const completeBtn = document.createElement('button');
         completeBtn.innerText = '完了';
-        completeBtn.onclick = async () => { await api(`/api/task/${t.id}/complete`, 'POST'); loadTasks(); };
+        completeBtn.onclick = () => { completeTask(t.id); loadTasks(); };
 
         const deleteBtn = document.createElement('button');
         deleteBtn.innerText = '削除';
         deleteBtn.className = 'secondary';
-        deleteBtn.onclick = async () => { await api(`/api/task/${t.id}/delete`, 'POST'); loadTasks(); };
+        deleteBtn.onclick = () => { deleteTask(t.id); loadTasks(); };
 
         const notifyBtn = document.createElement('button');
         notifyBtn.innerText = '通知';
@@ -216,7 +240,7 @@ function createTaskElem(t) {
             notifyBtn.disabled = true;
             notifyResult.innerText = '送信中...';
             try {
-                const r = await api(`/api/task/${t.id}/notify`, 'POST');
+                const r = await api(`/api/task/notify`, 'POST', { task: t });
                 if (r && r.ok) {
                     notifyResult.innerText = '送信済み';
                     setTimeout(() => { notifyResult.innerText = ''; notifyBtn.disabled = false; }, 3000);
@@ -239,7 +263,7 @@ function createTaskElem(t) {
     } else {
         const restoreBtn = document.createElement('button');
         restoreBtn.innerText = '復元';
-        restoreBtn.onclick = async () => { await api(`/api/task/${t.id}/restore`, 'POST'); loadTasks(); };
+        restoreBtn.onclick = () => { restoreTask(t.id); loadTasks(); };
         actions.appendChild(restoreBtn);
     }
 
@@ -397,29 +421,38 @@ async function showCourseRegistrationModal(importId, newCourses) {
 
             if (hasError) return;
 
-            // 科目名保存
+            // 科目名をlocalStorageに保存
+            const courses = getLocalCourses();
             for (const courseInfo of newCourses) {
                 const input = $(`course-input-${courseInfo.courseId}`);
                 const errorMsg = $(`course-error-${courseInfo.courseId}`);
                 const courseName = input.value.trim();
                 if (courseName) {
-                    try {
-                        await api('/api/courses', 'POST', { courseId: courseInfo.courseId, courseName });
-                    } catch (err) {
-                        if (err && err.duplicate) {
-                            input.style.borderColor = '#ef4444';
-                            errorMsg.innerText = 'この科目名は既に登録されています！！';
-                            errorMsg.style.display = 'block';
-                            hasError = true;
-                        }
+                    const duplicate = courses.find(c => c.courseName === courseName);
+                    if (duplicate) {
+                        input.style.borderColor = '#ef4444';
+                        errorMsg.innerText = 'この科目名は既に登録されています！！';
+                        errorMsg.style.display = 'block';
+                        hasError = true;
+                    } else {
+                        courses.push({ courseId: courseInfo.courseId, courseName });
                     }
                 }
             }
 
             if (hasError) return;
 
-            // 保存後追加する！！
-            await api('/api/import/confirm', 'POST', { importId });
+            saveLocalCourses(courses);
+
+            // タスクをlocalStorageに保存
+            const r = await api('/api/import/confirm', 'POST', { importId });
+            if (r && r.tasks) {
+                const existingTasks = getLocalTasks();
+                const newTasks = r.tasks.filter(newTask =>
+                    !existingTasks.find(t => t.uid === newTask.uid)
+                );
+                saveLocalTasks([...existingTasks, ...newTasks]);
+            }
 
             closeCourseModal();
             resolve();
@@ -434,9 +467,9 @@ $('sortSelect').addEventListener('change', (e) => {
 });
 
 // 科目管理
-async function loadCoursesList() {
-    const courses = await api('/api/courses');
-    const tasks = await api('/api/tasks');
+function loadCoursesList() {
+    const courses = getLocalCourses();
+    const tasks = getLocalTasks();
     const courseMap = {};
     courses.forEach(c => courseMap[c.courseId] = c.courseName);
 
@@ -521,20 +554,29 @@ function editCourseName(course) {
     const newName = prompt(`「${course.courseName}」の科目名を編集`, course.courseName);
     if (!newName || !newName.trim()) return;
 
-    api('/api/courses', 'POST', { courseId: course.courseId, courseName: newName.trim() })
-        .then(() => loadCoursesList())
-        .catch(err => alert('編集に失敗しました: ' + (err && err.error ? err.error : '不明なエラー')));
+    const courses = getLocalCourses();
+    const duplicate = courses.find(c => c.courseName === newName.trim() && c.courseId !== course.courseId);
+    if (duplicate) {
+        alert('この科目名は既に登録されています！');
+        return;
+    }
+
+    const target = courses.find(c => c.courseId === course.courseId);
+    if (target) {
+        target.courseName = newName.trim();
+        saveLocalCourses(courses);
+        loadCoursesList();
+    }
 }
 
 function deleteCourse(course) {
     if (!confirm(`「${course.courseName}」を本当に削除しますか？\n\n課題は削除されません。`)) return;
 
-    api('/api/courses/' + course.courseId, 'DELETE', null)
-        .then(() => {
-            alert('削除しました');
-            loadCoursesList();
-        })
-        .catch(err => alert('削除に失敗しました: ' + (err && err.error ? err.error : '不明なエラー')));
+    const courses = getLocalCourses();
+    const filtered = courses.filter(c => c.courseId !== course.courseId);
+    saveLocalCourses(filtered);
+    alert('削除しました');
+    loadCoursesList();
 }
 
 // 設定
@@ -551,8 +593,17 @@ $('importBtn').addEventListener('click', async () => {
         // 新規コース
         if (r.newCourses && r.newCourses.length > 0) {
             await showCourseRegistrationModal(r.importId, r.newCourses);
+            resultEl.innerText = `追加: ${r.count} 件`;
         } else {
-            await api('/api/import/confirm', 'POST', { importId: r.importId });
+            // 新規コースなし、直接保存
+            const confirmRes = await api('/api/import/confirm', 'POST', { importId: r.importId });
+            if (confirmRes && confirmRes.tasks) {
+                const existingTasks = getLocalTasks();
+                const newTasks = confirmRes.tasks.filter(newTask =>
+                    !existingTasks.find(t => t.uid === newTask.uid)
+                );
+                saveLocalTasks([...existingTasks, ...newTasks]);
+            }
             resultEl.innerText = `追加: ${r.count} 件`;
         }
 
@@ -577,22 +628,46 @@ $('saveConfigBtn').addEventListener('click', async () => {
 });
 
 // 全削除仮
-$('clearAllBtn').addEventListener('click', async () => {
+$('clearAllBtn').addEventListener('click', () => {
     if (!confirm('マジで？')) return;
     const el = $('clearResult');
     el.innerText = '実行中...';
     try {
-        const r = await api('/api/debug/clear-tasks', 'POST');
-        if (r && r.ok) {
-            el.innerText = 'Done!';
-            loadTasks();
-        } else {
-            el.innerText = 'Failed...';
-        }
+        saveLocalTasks([]);
+        el.innerText = 'Done!';
+        loadTasks();
     } catch (err) {
         el.innerText = 'Failed...';
     }
 });
+
+// タスク操作関数
+function completeTask(taskId) {
+    const tasks = getLocalTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+        task.status = 'completed';
+        saveLocalTasks(tasks);
+    }
+}
+
+function deleteTask(taskId) {
+    const tasks = getLocalTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+        task.status = 'deleted';
+        saveLocalTasks(tasks);
+    }
+}
+
+function restoreTask(taskId) {
+    const tasks = getLocalTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+        task.status = 'active';
+        saveLocalTasks(tasks);
+    }
+}
 
 async function loadConfigToUI() {
     const cfg = await api('/api/config');

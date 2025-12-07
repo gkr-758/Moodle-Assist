@@ -171,9 +171,9 @@ function parseICS(data) {
 // パーサーここまで
 
 // apiとか
+// localStorage移行により /api/tasks は不要（念のため空配列を返す）
 app.get('/api/tasks', (req, res) => {
-    const tasks = loadTasks();
-    res.json(tasks);
+    res.json([]);
 });
 
 // インポート一時保存
@@ -187,16 +187,10 @@ app.post('/api/import', async (req, res) => {
         const r = await axios.get(url);
         const parsedEvents = parseICS(r.data);
 
-        const tasks = loadTasks();
-        const coursesData = loadCourses();
-        const existingCourseIds = new Set(coursesData.courses.map(c => c.courseId));
-
-        const existingUids = new Set(tasks.map(t => t.uid).filter(Boolean));
-        const existingByTitleDue = tasks.map(t => ({
-            id: t.id,
-            titleNorm: (t.title || '').trim().toLowerCase(),
-            dueTs: t.due ? new Date(t.due).getTime() : null
-        }));
+        // localStorageベースのため、サーバーは既存データを持たない
+        const existingUids = new Set();
+        const existingByTitleDue = [];
+        const existingCourseIds = new Set();
 
         const toAdd = [];
         const newCourseInfo = {};  // courseId -> { courseId, sampleTaskTitle }
@@ -259,44 +253,9 @@ app.post('/api/import', async (req, res) => {
     }
 });
 
-app.post('/api/task/:id/complete', (req, res) => {
-    const id = req.params.id;
-    const tasks = loadTasks();
-    const t = tasks.find(x => x.id === id);
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    t.status = 'completed';
-    t.completed_at = (new Date()).toISOString();
-    saveTasks(tasks);
-    res.json({ ok: true, task: t });
-});
-
-app.post('/api/task/:id/delete', (req, res) => {
-    const id = req.params.id;
-    const tasks = loadTasks();
-    const t = tasks.find(x => x.id === id);
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    t.status = 'deleted';
-    t.deleted_at = (new Date()).toISOString();
-    saveTasks(tasks);
-    res.json({ ok: true, task: t });
-});
-
-app.post('/api/task/:id/restore', (req, res) => {
-    const id = req.params.id;
-    const tasks = loadTasks();
-    const t = tasks.find(x => x.id === id);
-    if (!t) return res.status(404).json({ error: 'Not found' });
-    t.status = 'active';
-    delete t.deleted_at;
-    saveTasks(tasks);
-    res.json({ ok: true, task: t });
-});
-
-app.post('/api/task/:id/notify', async (req, res) => {
-    const id = req.params.id;
-    const tasks = loadTasks();
-    const t = tasks.find(x => x.id === id);
-    if (!t) return res.status(404).json({ error: 'Task not found' });
+app.post('/api/task/notify', async (req, res) => {
+    const { task } = req.body;
+    if (!task) return res.status(404).json({ error: 'Task not found' });
 
     const cfg = loadConfig();
     const webhookUrl = ENV_WEBHOOK || (cfg.webhookUrl || '');
@@ -304,7 +263,7 @@ app.post('/api/task/:id/notify', async (req, res) => {
         return res.status(400).json({ error: 'Webhook not configured on server. Set DISCORD_WEBHOOK_URL in .env and restart.' });
     }
 
-    const embed = buildTaskEmbed(t);
+    const embed = buildTaskEmbed(task);
     try {
         await sendDiscordWebhookEmbed(webhookUrl, embed);
         return res.json({ ok: true, sent: true });
@@ -342,45 +301,8 @@ app.get('/api/config', (req, res) => {
 });
 
 app.get('/api/courses', (req, res) => {
-    const coursesData = loadCourses();
-    res.json(coursesData.courses);
-});
-
-app.post('/api/courses', (req, res) => {
-    const { courseId, courseName } = req.body;
-    if (!courseId || !courseName) {
-        return res.status(400).json({ error: '科目名が入力されていません。' });
-    }
-    const coursesData = loadCourses();
-
-    // 科目名の重複チェック（同じcourseIdは除外）
-    const isDuplicateName = coursesData.courses.some(c =>
-        c.courseName === courseName && c.courseId !== courseId
-    );
-    if (isDuplicateName) {
-        return res.status(400).json({ error: '同じ科目名が既に存在します。', duplicate: true });
-    }
-
-    const existing = coursesData.courses.find(c => c.courseId === courseId);
-    if (!existing) {
-        coursesData.courses.push({ courseId, courseName });
-    } else {
-        existing.courseName = courseName;
-    }
-    saveCourses(coursesData);
-    res.json({ ok: true, course: { courseId, courseName } });
-});
-
-app.delete('/api/courses/:courseId', (req, res) => {
-    const courseId = req.params.courseId;
-    const coursesData = loadCourses();
-    const index = coursesData.courses.findIndex(c => c.courseId === courseId);
-    if (index === -1) {
-        return res.status(404).json({ error: '科目が見つかりませんでした。' });
-    }
-    coursesData.courses.splice(index, 1);
-    saveCourses(coursesData);
-    res.json({ ok: true });
+    // localStorage移行により空配列を返す
+    res.json([]);
 });
 
 app.post('/api/import/confirm', (req, res) => {
@@ -390,49 +312,17 @@ app.post('/api/import/confirm', (req, res) => {
     }
 
     const { toAdd } = importCache[importId];
-    const tasks = loadTasks();
-    tasks.push(...toAdd);
-    saveTasks(tasks);
 
     // キャッシュクリア
     delete importCache[importId];
 
-    res.json({ ok: true, added: toAdd.length });
+    // タスクをクライアントに返す（localStorage保存用）
+    res.json({ ok: true, tasks: toAdd, added: toAdd.length });
 });
 
-// リマインド cronにする
-const job = new CronJob('* * * * *', async () => {
-    const tasks = loadTasks();
-    const cfg = loadConfig();
-    const webhookUrl = ENV_WEBHOOK || (cfg.webhookUrl || '');
-    if (!webhookUrl) return;
-
-    const reminderDays = (typeof cfg.reminderDays === 'number' ? cfg.reminderDays : 1);
-    const reminderBeforeMs = reminderDays * 24 * 60 * 60 * 1000;
-
-    const now = Date.now();
-    let changed = false;
-
-    for (const t of tasks) {
-        if (t.status !== 'active') continue;
-        if (!t.due) continue;
-        const dueTs = new Date(t.due).getTime();
-
-        if (!t.reminded && now >= dueTs - reminderBeforeMs && now < dueTs + (24 * 60 * 60 * 1000)) {
-            const embed = buildTaskEmbed(t);
-            try {
-                await sendDiscordWebhookEmbed(webhookUrl, embed);
-                t.reminded = true;
-                changed = true;
-            } catch (err) {
-                console.error('リマインダー送信失敗...。', t.id, err && err.message ? err.message : err);
-            }
-        }
-    }
-
-    if (changed) saveTasks(tasks);
-});
-job.start();
+// リマインダー機能はlocalStorageベースのため無効化
+// const job = new CronJob('* * * * *', async () => { ... });
+// job.start();
 
 app.listen(PORT, () => {
     console.log(`Server listening on http://localhost:${PORT}`);
