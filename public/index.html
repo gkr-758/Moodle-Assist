@@ -5,29 +5,61 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Moodle-Assist</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="stylesheet" href="/styles.css">
 </head>
 
 <body>
   <div class="app">
-    <aside class="sidebar">
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <aside class="sidebar" id="sidebar">
       <div class="brand">Moodle-Assist</div>
       <nav>
         <button id="nav-home" class="navbtn active">ホーム</button>
+        <button id="nav-courses" class="navbtn">科目</button>
         <button id="nav-settings" class="navbtn">設定</button>
       </nav>
-      <div class="sidebar-footer muted"></div>
+      <div class="sidebar-footer">
+        <a href="https://github.com/gkr-758/Moodle-Assist" target="_blank" rel="noopener noreferrer"
+          class="github-link">
+          <img src="/logo.png" alt="Moodle-Assist Logo" class="sidebar-logo">
+          <span>GitHub</span>
+        </a>
+      </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
+        <button class="menu-toggle" id="menuToggle">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            stroke-linecap="round">
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
         <h1 id="page-title">ホーム</h1>
       </header>
 
       <section id="home-view" class="view">
         <div class="card">
-          <h2>課題一覧</h2>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h2 style="margin: 0;">課題一覧</h2>
+            <select id="sortSelect" class="sort-select">
+              <option value="default">デフォルト</option>
+              <option value="course">科目別</option>
+              <option value="dueASC">期限が近い</option>
+              <option value="dueDESC">期限が遠い</option>
+            </select>
+          </div>
           <div id="tasksContainer"></div>
+        </div>
+      </section>
+
+      <section id="courses-view" class="view hidden">
+        <div class="card">
+          <h2>科目管理</h2>
+          <div id="coursesContainer"></div>
         </div>
       </section>
 
@@ -52,15 +84,29 @@
           </div>
         </div>
 
-        <div class="card">
+        <!-- <div class="card">
           <h2>Debug</h2>
           <p class="muted">課題全削除</p>
           <button id="clearAllBtn" style="background:#ef4444">実行</button>
-          <div id="clearResult" class="muted" style="margin-top:8px"></div>
-        </div>
+          <div id="clearResult" class="muted" style="margin-top:8px"></div> -->
+  </div>
 
-      </section>
-    </main>
+  </section>
+  </main>
+  </div>
+
+  <!-- 新規 -->
+  <div id="courseModal" class="modal hidden">
+    <div class="modal-overlay" id="courseModalOverlay"></div>
+    <div class="modal-content">
+      <h2>科目を登録</h2>
+      <h5>コース番号はマイコースから参照してください。</h5>
+      <div id="courseModalBody"></div>
+      <div style="margin-top: 10px; display: flex; gap: 6px;">
+        <button id="courseModalSave" style="flex: 1;">OK</button>
+        <button id="courseModalCancel" class="secondary" style="flex: 1;">キャンセル</button>
+      </div>
+    </div>
   </div>
 
   <script src="/app.js"></script>

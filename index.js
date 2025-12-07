@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const COURSES_FILE = path.join(DATA_DIR, 'courses.json');
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,6 +25,7 @@ if (!fs.existsSync(CONFIG_FILE)) fs.writeFileSync(CONFIG_FILE, JSON.stringify({
     webhookUrl: "",
     reminderDays: 1
 }));
+if (!fs.existsSync(COURSES_FILE)) fs.writeFileSync(COURSES_FILE, JSON.stringify({ courses: [] }));
 
 function loadTasks() {
     try {
@@ -44,6 +46,24 @@ function loadConfig() {
 }
 function saveConfig(cfg) {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+}
+
+function loadCourses() {
+    try {
+        return JSON.parse(fs.readFileSync(COURSES_FILE, 'utf8'));
+    } catch (e) {
+        return { courses: [] };
+    }
+}
+
+function saveCourses(coursesData) {
+    fs.writeFileSync(COURSES_FILE, JSON.stringify(coursesData, null, 2));
+}
+
+function getCourseNameById(courseId) {
+    const data = loadCourses();
+    const course = data.courses.find(c => c.courseId === courseId);
+    return course ? course.courseName : null;
 }
 
 const ENV_WEBHOOK = process.env.DISCORD_WEBHOOK_URL ? process.env.DISCORD_WEBHOOK_URL.trim() : "";
@@ -74,9 +94,13 @@ function buildTaskEmbed(task) {
     const colorUrgent = 0xB91C1C; // 赤
     const colorNormal = 0x2563EB; // 青
 
+    // 説明文の改行を処理（\\nと\nの両方に対応）
+    let description = task.description ? String(task.description) : '-';
+    description = description.replace(/\\n/g, '\n').replace(/\\r\\n/g, '\n');
+
     const embed = {
         title: task.title || '(no title)',
-        description: task.description ? String(task.description) : '-',
+        description: description,
         fields: [
             {
                 name: '期限',
@@ -132,12 +156,14 @@ function parseICS(data) {
         const description = getField('DESCRIPTION') || '';
         const dtstartRaw = getField('DTSTART');
         const uid = getField('UID') || null;
+        const categories = getField('CATEGORIES') || '';
         const startDate = parseICSTime(dtstartRaw);
         events.push({
             summary,
             description,
             dtstart: startDate ? startDate.toISOString() : null,
-            uid
+            uid,
+            courseId: categories
         });
     }
     return events;
@@ -150,6 +176,9 @@ app.get('/api/tasks', (req, res) => {
     res.json(tasks);
 });
 
+// インポート一時保存
+const importCache = {};
+
 app.post('/api/import', async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: 'Missing url' });
@@ -159,6 +188,9 @@ app.post('/api/import', async (req, res) => {
         const parsedEvents = parseICS(r.data);
 
         const tasks = loadTasks();
+        const coursesData = loadCourses();
+        const existingCourseIds = new Set(coursesData.courses.map(c => c.courseId));
+
         const existingUids = new Set(tasks.map(t => t.uid).filter(Boolean));
         const existingByTitleDue = tasks.map(t => ({
             id: t.id,
@@ -166,7 +198,9 @@ app.post('/api/import', async (req, res) => {
             dueTs: t.due ? new Date(t.due).getTime() : null
         }));
 
-        const added = [];
+        const toAdd = [];
+        const newCourseInfo = {};  // courseId -> { courseId, sampleTaskTitle }
+
         for (const ev of parsedEvents) {
             if (!ev.dtstart) continue;
             if (ev.uid && existingUids.has(ev.uid)) continue;
@@ -191,21 +225,34 @@ app.post('/api/import', async (req, res) => {
                 title: ev.summary,
                 description: ev.description,
                 due: ev.dtstart,
+                courseId: ev.courseId || '',
                 status: 'active',
                 created_at: (new Date()).toISOString(),
                 reminded: false
             };
-            tasks.push(task);
-            added.push(task);
-            if (task.uid) existingUids.add(task.uid);
+            toAdd.push(task);
             existingByTitleDue.push({
                 id: task.id,
                 titleNorm: (task.title || '').trim().toLowerCase(),
                 dueTs: task.due ? new Date(task.due).getTime() : null
             });
+            if (task.uid) existingUids.add(task.uid);
+
+            // 新規コース
+            if (ev.courseId && !existingCourseIds.has(ev.courseId) && !newCourseInfo[ev.courseId]) {
+                newCourseInfo[ev.courseId] = {
+                    courseId: ev.courseId,
+                    sampleTaskTitle: ev.summary || ''
+                };
+            }
         }
-        saveTasks(tasks);
-        res.json({ added, count: added.length });
+
+        // 一時保存
+        const importId = `import_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        importCache[importId] = { toAdd, existingCourseIds };
+
+        const newCourseList = Object.values(newCourseInfo);
+        res.json({ importId, newCourses: newCourseList, count: toAdd.length });
     } catch (err) {
         console.error('Import error:', err && err.message ? err.message : err);
         res.status(500).json({ error: 'Failed to fetch or parse ICS', details: err && err.message ? err.message : String(err) });
@@ -294,6 +341,65 @@ app.get('/api/config', (req, res) => {
     });
 });
 
+app.get('/api/courses', (req, res) => {
+    const coursesData = loadCourses();
+    res.json(coursesData.courses);
+});
+
+app.post('/api/courses', (req, res) => {
+    const { courseId, courseName } = req.body;
+    if (!courseId || !courseName) {
+        return res.status(400).json({ error: '科目名が入力されていません。' });
+    }
+    const coursesData = loadCourses();
+
+    // 科目名の重複チェック（同じcourseIdは除外）
+    const isDuplicateName = coursesData.courses.some(c =>
+        c.courseName === courseName && c.courseId !== courseId
+    );
+    if (isDuplicateName) {
+        return res.status(400).json({ error: '同じ科目名が既に存在します。', duplicate: true });
+    }
+
+    const existing = coursesData.courses.find(c => c.courseId === courseId);
+    if (!existing) {
+        coursesData.courses.push({ courseId, courseName });
+    } else {
+        existing.courseName = courseName;
+    }
+    saveCourses(coursesData);
+    res.json({ ok: true, course: { courseId, courseName } });
+});
+
+app.delete('/api/courses/:courseId', (req, res) => {
+    const courseId = req.params.courseId;
+    const coursesData = loadCourses();
+    const index = coursesData.courses.findIndex(c => c.courseId === courseId);
+    if (index === -1) {
+        return res.status(404).json({ error: '科目が見つかりませんでした。' });
+    }
+    coursesData.courses.splice(index, 1);
+    saveCourses(coursesData);
+    res.json({ ok: true });
+});
+
+app.post('/api/import/confirm', (req, res) => {
+    const { importId } = req.body;
+    if (!importId || !importCache[importId]) {
+        return res.status(400).json({ error: '無効のIDです。' });
+    }
+
+    const { toAdd } = importCache[importId];
+    const tasks = loadTasks();
+    tasks.push(...toAdd);
+    saveTasks(tasks);
+
+    // キャッシュクリア
+    delete importCache[importId];
+
+    res.json({ ok: true, added: toAdd.length });
+});
+
 // リマインド cronにする
 const job = new CronJob('* * * * *', async () => {
     const tasks = loadTasks();
@@ -319,7 +425,7 @@ const job = new CronJob('* * * * *', async () => {
                 t.reminded = true;
                 changed = true;
             } catch (err) {
-                console.error('Failed to send reminder embed for task', t.id, err && err.message ? err.message : err);
+                console.error('リマインダー送信失敗...。', t.id, err && err.message ? err.message : err);
             }
         }
     }

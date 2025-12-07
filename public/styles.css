@@ -71,8 +71,30 @@ nav {
 
 .sidebar-footer {
     margin-top: auto;
-    font-size: 12px;
-    color: #9ca3af
+    padding-top: 12px;
+}
+
+.github-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #cbd5e1;
+    text-decoration: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.2s, color 0.2s;
+    font-size: 14px;
+}
+
+.github-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.sidebar-logo {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
 }
 
 .main {
@@ -185,6 +207,16 @@ button.secondary {
     background: #9ca3af
 }
 
+.course-badge {
+    display: inline-block;
+    background: #dbeafe;
+    color: #0c4a6e;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-top: 6px;
+}
+
 .small {
     font-size: 13px;
     color: #374151
@@ -222,4 +254,248 @@ button.secondary {
     cursor: pointer;
     padding: 0;
     font-size: 13px;
+}
+
+.menu-toggle {
+    display: none;
+    background: transparent;
+    color: #0f172a;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 8px;
+    margin-right: 12px;
+}
+
+.sidebar.open {
+    left: 0;
+    z-index: 1000;
+}
+
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.sidebar-overlay.open {
+    display: block;
+}
+
+/* れすぽ */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 240px;
+        position: fixed;
+        left: -240px;
+        transition: left 0.3s ease;
+    }
+
+    .main {
+        margin-left: 0;
+        padding: 16px;
+    }
+
+    .menu-toggle {
+        display: block;
+    }
+
+    .card {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+
+    .task {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .task .actions {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .topbar {
+        margin-bottom: 10px;
+    }
+
+    .topbar h1 {
+        font-size: 18px;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+        padding: 10px;
+        margin: 6px 0 8px 0;
+    }
+
+    button {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+}
+
+/* れすぽ（ジジイスマホ用） */
+@media (max-width: 480px) {
+    .main {
+        padding: 12px;
+    }
+
+    .card {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 8px;
+    }
+
+    .card h2 {
+        margin-top: 0;
+        margin-bottom: 12px;
+        font-size: 16px;
+    }
+
+    .topbar h1 {
+        font-size: 16px;
+    }
+
+    .task {
+        padding: 10px;
+        gap: 8px;
+    }
+
+    .task .actions {
+        gap: 6px;
+    }
+
+    button {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    input[type="text"],
+    input[type="number"] {
+        padding: 8px 10px;
+        font-size: 16px;
+    }
+
+    .badge {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    .timestamp {
+        font-size: 12px;
+    }
+
+    .desc {
+        font-size: 12px;
+    }
+
+    .readmore {
+        font-size: 12px;
+    }
+
+    .menu-toggle {
+        font-size: 20px;
+        padding: 6px;
+    }
+}
+
+/* もだる */
+.modal {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    position: relative;
+    background: var(--card);
+    border-radius: 12px;
+    padding: 16px;
+    max-width: 350px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    font-size: 16px;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #e6edf3;
+    background: #fbfdff;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.sort-btn {
+    background: #e5e7eb;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.sort-btn:hover {
+    background: #d1d5db;
+}
+
+.sort-btn.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.sort-select {
+    background: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.course-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid #f0f3f7;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    gap: 12px;
 }
